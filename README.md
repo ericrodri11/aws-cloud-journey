@@ -16,20 +16,32 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
-| **05** | [Serverless Function (NoOps)](./Day-05-Lambda-Serverless) | `Lambda` `Python` | Running code without provisioning servers. Cost efficiency (pay-per-ms). |
-| **04** | [Automated EC2 Web Server](./Day-04-EC2-UserData) | `EC2` `User Data` `Bash` | Bootstrapping instances automatically. Infrastructure as Code basics. |
+| **08** | [Secrets Management](./Day-08-Secrets-Manager) | `Secrets Manager` `IAM` | Avoiding hardcoded credentials in Python scripts. |
+| **07** | [AI Agent Architecture](./Day-07-Architecture) | `Draw.io` `System Design` | Designing a Fintech App flow before coding. |
+| **06** | [Serverless API](./Day-05-Lambda-Serverless) | `API Gateway` | Exposing Lambda functions to the public internet via HTTP. |
+| **05** | [Serverless Function (NoOps)](./Day-05-Lambda-Serverless) | `Lambda` `Python` | Running code without provisioning servers. Cost efficiency. |
+| **04** | [Automated EC2 Web Server](./Day-04-EC2-UserData) | `EC2` `User Data` `Bash` | Bootstrapping instances automatically. IaC basics. |
 | **03** | [Static Website Hosting](./Day-03-S3-Website) | `S3` | Hosting a portfolio site with high availability and low cost. |
 | **01-02** | AWS Foundations | `IAM` `Billing` | Setting up MFA, Budgets, and secure root access. |
 
-## 🛠️ Tech Stack & Tools
+## 🏗️ Architecture Diagram (Day 7)
 
-* **Cloud Provider:** AWS (Amazon Web Services)
-* **Languages:** Python (Logic), Bash (Automation), HTML/CSS (Frontend)
-* **Focus Area:** Serverless Architecture, Event-Driven Patterns, Cloud Security.
+```mermaid
+graph LR
+    Bank[Bank API] -- Secure Data --> Lambda[AWS Lambda]
+    Lambda -- Store Secrets --> Secrets[AWS Secrets Manager]
+    Lambda -- Save Tx --> Dynamo[DynamoDB]
+    Lambda -- Analyze --> Bedrock[AWS Bedrock AI]
+    style Secrets fill:#DD0000,stroke:#333,color:white
+    style Bedrock fill:#228B22,stroke:#333,color:white
+🛠️ Tech Stack & Tools
+Cloud Provider: AWS (Amazon Web Services)
 
-## 🌟 Why I'm doing this
+Languages: Python (Logic), Bash (Automation)
 
-Coming from a software development background (Harvard CS50P), I realized that understanding **where** code runs is just as important as the code itself. My mission is to bridge the gap between "Writing Code" and "Architecting Solutions" to help other developers overcome the fear of the cloud.
+Focus Area: Serverless Architecture, Event-Driven Patterns, Cloud Security, FinOps.
 
----
-*Created by [Eric Rodríguez](https://www.linkedin.com/in/ericrodri11/) - Aspiring AWS Community Builder 2026*
+🌟 Why I'm doing this
+Coming from a software development background, I realized that understanding where code runs is just as important as the code itself. My mission is to bridge the gap between "Writing Code" and "Architecting Solutions" to help other developers overcome the fear of the cloud.
+
+Created by Eric Rodríguez - Aspiring AWS Community Builder 2026
