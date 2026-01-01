@@ -34,14 +34,16 @@ graph LR
     Lambda -- Analyze --> Bedrock[AWS Bedrock AI]
     style Secrets fill:#DD0000,stroke:#333,color:white
     style Bedrock fill:#228B22,stroke:#333,color:white
-🛠️ Tech Stack & Tools
-Cloud Provider: AWS (Amazon Web Services)
 
-Languages: Python (Logic), Bash (Automation)
+## 🛠️ Tech Stack & Tools
 
-Focus Area: Serverless Architecture, Event-Driven Patterns, Cloud Security, FinOps.
+* **Cloud Provider:** AWS (Amazon Web Services)
+* **Languages:** Python (Logic), Bash (Automation), HTML/CSS (Frontend)
+* **Focus Area:** Serverless Architecture, Event-Driven Patterns, Cloud Security.
 
-🌟 Why I'm doing this
-Coming from a software development background, I realized that understanding where code runs is just as important as the code itself. My mission is to bridge the gap between "Writing Code" and "Architecting Solutions" to help other developers overcome the fear of the cloud.
+## 🌟 Why I'm doing this
 
-Created by Eric Rodríguez - Aspiring AWS Community Builder 2026
+Coming from a software development background (Harvard CS50P), I realized that understanding **where** code runs is just as important as the code itself. My mission is to bridge the gap between "Writing Code" and "Architecting Solutions" to help other developers overcome the fear of the cloud.
+
+---
+*Created by [Eric Rodríguez](https://www.linkedin.com/in/eric-rodriguez1998/) - Aspiring AWS Community Builder 2026*
