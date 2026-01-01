@@ -26,7 +26,7 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 ## 🏗️ Architecture Diagram (Day 7)
 
-```mermaid
+mermaid
 graph LR
     Bank[Bank API] -- Secure Data --> Lambda[AWS Lambda]
     Lambda -- Store Secrets --> Secrets[AWS Secrets Manager]
