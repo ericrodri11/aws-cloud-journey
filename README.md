@@ -16,6 +16,8 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **12** | [Context-Aware AI (RAG)](./Day-12-AI-Context) | `Bedrock` `DynamoDB` `RAG` | Built a Retrieval-Augmented Generation pipeline to let AI read DB history. |
+| **11** | [Generative AI with Bedrock](./Day-11-Bedrock-AI) | `Bedrock` `Titan` `Serverless` | Integrated Amazon Titan (Foundation Model) to analyze text via API. |
 | **10** | [NoSQL Database Design](./Day-10-DynamoDB) | `DynamoDB` `Boto3` | Designing Single Table Design schemas and persisting data. |
 | **09** | [Banking API Connect](./Day-09-Banking-Connection) | `Lambda` `Python` `Urllib3` | Connecting to external APIs and implementing Mock Strategy. |
 | **08** | [Secrets Management](./Day-08-Secrets-Manager) | `Secrets Manager` `IAM` | Avoiding hardcoded credentials in Python scripts. |
