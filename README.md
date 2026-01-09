@@ -16,15 +16,18 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
-| **12** | [Context-Aware AI (RAG)](./Day-12-AI-Context) | `Bedrock` `DynamoDB` `RAG` | Built a Retrieval-Augmented Generation pipeline to let AI read DB history. |
-| **11** | [Generative AI with Bedrock](./Day-11-Bedrock-AI) | `Bedrock` `Titan` `Serverless` | Integrated Amazon Titan (Foundation Model) to analyze text via API. |
+| **15** | [Frontend Dashboard on S3](./Day-15-Frontend-S3) | `S3` `React` `Vite` | Deployed a modern React SPA dashboard using S3 Static Website Hosting. |
+| **14** | [Automation with EventBridge](./Day-14-Automation) | `EventBridge` `Cron` | Configured a serverless scheduler to trigger the AI analysis automatically every day at 09:00 AM. |
+| **13** | [Automated Email Alerts](./Day-13-Notifications) | `SNS` `Amazon Nova` | Integrated Amazon SNS to send AI-generated financial reports to email. Migrated from Titan to Nova Micro. |
+| **12** | [Context-Aware AI (RAG)](./Day-12-AI-Context) | `Bedrock` `DynamoDB` | Built a Retrieval-Augmented Generation pipeline to let AI read DB history. |
+| **11** | [Generative AI with Bedrock](./Day-11-Bedrock-AI) | `Bedrock` `Titan` | Integrated Amazon Titan (Foundation Model) to analyze text via API. |
 | **10** | [NoSQL Database Design](./Day-10-DynamoDB) | `DynamoDB` `Boto3` | Designing Single Table Design schemas and persisting data. |
-| **09** | [Banking API Connect](./Day-09-Banking-Connection) | `Lambda` `Python` `Urllib3` | Connecting to external APIs and implementing Mock Strategy. |
+| **09** | [Banking API Connect](./Day-09-Banking-Connection) | `Lambda` `Python` | Connecting to external APIs and implementing Mock Strategy. |
 | **08** | [Secrets Management](./Day-08-Secrets-Manager) | `Secrets Manager` `IAM` | Avoiding hardcoded credentials in Python scripts. |
 | **07** | [AI Agent Architecture](./Day-07-Architecture) | `Draw.io` `System Design` | Designing a Fintech App flow before coding. |
 | **06** | [Serverless API](./Day-05-Lambda-Serverless) | `API Gateway` | Exposing Lambda functions to the public internet via HTTP. |
 | **05** | [Serverless Function (NoOps)](./Day-05-Lambda-Serverless) | `Lambda` `Python` | Running code without provisioning servers. Cost efficiency. |
-| **04** | [Automated EC2 Web Server](./Day-04-EC2-UserData) | `EC2` `User Data` `Bash` | Bootstrapping instances automatically. IaC basics. |
+| **04** | [Automated EC2 Web Server](./Day-04-EC2-UserData) | `EC2` `User Data` | Bootstrapping instances automatically. IaC basics. |
 | **03** | [Static Website Hosting](./Day-03-S3-Website) | `S3` | Hosting a portfolio site with high availability and low cost. |
 | **01-02** | AWS Foundations | `IAM` `Billing` | Setting up MFA, Budgets, and secure root access. |
 
