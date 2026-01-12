@@ -16,6 +16,8 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **17** | [Full Stack Integration](./Day-17-Full-Stack-Integration) | `React` `Fetch API` | Connected the S3 Frontend to the API Gateway. Replaced mock data with live DynamoDB feeds. |
+| **16** | [Serverless API Gateway](./Day-16-API-Gateway) | `API Gateway` `Lambda` `CORS` | Created a public HTTP API to expose DynamoDB data as JSON for the Frontend. |
 | **15** | [Frontend Dashboard on S3](./Day-15-Frontend-S3) | `S3` `React` `Vite` | Deployed a modern React SPA dashboard using S3 Static Website Hosting. |
 | **14** | [Automation with EventBridge](./Day-14-Automation) | `EventBridge` `Cron` | Configured a serverless scheduler to trigger the AI analysis automatically every day at 09:00 AM. |
 | **13** | [Automated Email Alerts](./Day-13-Notifications) | `SNS` `Amazon Nova` | Integrated Amazon SNS to send AI-generated financial reports to email. Migrated from Titan to Nova Micro. |
