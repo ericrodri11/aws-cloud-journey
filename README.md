@@ -16,6 +16,9 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **20** | [Pro HTML Emails with SES](./Day-20-SES-HTML-Emails) | `Amazon SES` `Python` `HTML/CSS` | Replaced SNS plain text with rich HTML email templates. Configured dynamic dark mode alerts and prompt engineering for actionable advice. |
+| **19** | [Smart Alerts Logic](./Day-19-Smart-Alerts) | `Python` `SNS` | Added business logic to calculate totals and trigger conditional "High Spending" email alerts. |
+| **18** | [CloudFront CDN & HTTPS](./Day-18-CDN-HTTPS) | `CloudFront` `OAC` | Implemented a CDN to serve the React app via HTTPS globally and secured the S3 bucket with Origin Access Control. |
 | **17** | [Full Stack Integration](./Day-17-Full-Stack-Integration) | `React` `Fetch API` | Connected the S3 Frontend to the API Gateway. Replaced mock data with live DynamoDB feeds. |
 | **16** | [Serverless API Gateway](./Day-16-API-Gateway) | `API Gateway` `Lambda` `CORS` | Created a public HTTP API to expose DynamoDB data as JSON for the Frontend. |
 | **15** | [Frontend Dashboard on S3](./Day-15-Frontend-S3) | `S3` `React` `Vite` | Deployed a modern React SPA dashboard using S3 Static Website Hosting. |
