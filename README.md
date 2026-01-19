@@ -16,6 +16,8 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **22** | [Serverless Dependency Injection](./Day-22-Lambda-Layers) | `AWS Lambda Layers` `Zip Packaging` | Migrated local scripts to the cloud. Created and deployed a custom Lambda Layer to inject external Python libraries (`plaid-python`) into the serverless environment. |
+| **21** | [Hybrid Banking Connector](./Day-21-Bank-Connectors) | `Python` `Plaid API` `Wise API` | Overcame API restrictions by architecting a hybrid solution: Plaid Sandbox for UI data simulation and Wise API for real-time production monitoring. |
 | **20** | [Pro HTML Emails with SES](./Day-20-SES-HTML-Emails) | `Amazon SES` `Python` `HTML/CSS` | Replaced SNS plain text with rich HTML email templates. Configured dynamic dark mode alerts and prompt engineering for actionable advice. |
 | **19** | [Smart Alerts Logic](./Day-19-Smart-Alerts) | `Python` `SNS` | Added business logic to calculate totals and trigger conditional "High Spending" email alerts. |
 | **18** | [CloudFront CDN & HTTPS](./Day-18-CDN-HTTPS) | `CloudFront` `OAC` | Implemented a CDN to serve the React app via HTTPS globally and secured the S3 bucket with Origin Access Control. |

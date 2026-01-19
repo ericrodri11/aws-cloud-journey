@@ -1,0 +1,139 @@
+import json
+import boto3
+from datetime import datetime
+from decimal import Decimal
+
+# --- CONFIGURATION ---
+REGION_BEDROCK = 'us-east-1' 
+REGION_RESOURCE = 'eu-north-1'
+TABLE_NAME = "FinanceAgent-Transactions"
+MODEL_ID = "amazon.nova-micro-v1:0"
+
+# MAIL
+USER_EMAIL = "ericridri11@gmail.com" 
+
+SPENDING_LIMIT = 100.00  
+
+# CLIENTS
+bedrock = boto3.client(service_name='bedrock-runtime', region_name=REGION_BEDROCK)
+dynamodb = boto3.resource('dynamodb', region_name=REGION_RESOURCE)
+table = dynamodb.Table(TABLE_NAME)
+ses = boto3.client('ses', region_name=REGION_RESOURCE)
+
+def get_today_transactions():
+    try:
+        response = table.scan()
+        return response.get('Items', [])
+    except Exception as e:
+        print(f"Error reading DB: {e}")
+        return []
+
+def invoke_nova_ai(transactions, total_spent, is_alert):
+    if is_alert:
+        tone_instruction = """
+        CRITICAL INSTRUCTION: The user spent TOO MUCH. You must be STRICT and OPINIONATED.
+        Do NOT just list the expenses again. JUDGE the expenses.
+        - Mention "hefty technology bills" if AWS is high.
+        - Criticize "daily coffees" or "lazy Uber rides".
+        - Use phrases like "Cut down immediately", "Consider canceling", "Walk instead".
+        """
+    else:
+        tone_instruction = "The user is doing well. Congratulate them briefly."
+
+    prompt = f"""
+    Act as a tough personal financial advisor.
+    Analyze these expenses: {json.dumps(transactions, default=str)}
+    Total: {total_spent} EUR.
+    
+    {tone_instruction}
+    
+    FORMATTING RULES (Strict HTML):
+    1. Start immediately with <h3><b>Summary:</b></h3> followed by a sharp paragraph evaluating the spending behavior (max 3 sentences).
+    2. Then write <h3><b>Advice:</b></h3> followed by specific, actionable steps to save money (max 3 sentences).
+    3. Use <p> tags for text. Do NOT use markdown (**).
+    """
+    
+    body = json.dumps({
+        "messages": [{"role": "user", "content": [{"text": prompt}]}],
+        "inferenceConfig": {"max_new_tokens": 1000, "temperature": 0.7}
+    })
+
+    try:
+        response = bedrock.invoke_model(
+            body=body, modelId=MODEL_ID,
+            accept="application/json", contentType="application/json"
+        )
+        response_body = json.loads(response.get("body").read())
+        return response_body['output']['message']['content'][0]['text']
+    except Exception as e:
+        return f"AI Error: {str(e)}"
+
+def generate_html_email(subject, ai_analysis, total_spent, is_alert, transactions):
+    color = "#ef4444" if is_alert else "#10b981" 
+    status_text = "🚨 High Spending Alert" if is_alert else "✅ Daily Balance"
+    
+    tx_rows = ""
+    for t in transactions:
+        tx_rows += f"""
+        <div style="display:flex; justify-content:space-between; padding: 8px 0; border-bottom: 1px solid #334155;">
+            <span style="color: #e2e8f0;">{t['description']}</span>
+            <span style="font-weight:bold; color: #f8fafc;">{t['amount']}€</span>
+        </div>"""
+
+    return f"""
+    <html>
+    <body style="font-family: 'Helvetica', sans-serif; background-color: #0f172a; color: #cbd5e1; padding: 20px;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+            <div style="background-color: {color}; padding: 20px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px;">{status_text}</h1>
+                <p style="color: white; opacity: 0.9; margin: 5px 0 0 0;">{datetime.now().strftime("%Y-%m-%d")}</p>
+            </div>
+            <div style="padding: 24px;">
+                <div style="background-color: #334155; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 20px;">
+                    <span style="display: block; font-size: 12px; text-transform: uppercase; color: #94a3b8;">Total Spent Today</span>
+                    <span style="display: block; font-size: 32px; font-weight: bold; color: white;">{total_spent} €</span>
+                </div>
+                
+                <div style="margin-bottom: 24px; color: #cbd5e1; line-height: 1.6;">
+                    {ai_analysis}
+                </div>
+                
+                <div style="margin-bottom: 24px; margin-top: 30px;">
+                    <h3 style="color: #94a3b8; font-size: 14px; text-transform: uppercase; border-bottom: 1px solid #475569; padding-bottom: 5px;">Transaction Breakdown</h3>
+                    {tx_rows}
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+
+def lambda_handler(event, context):
+    try:
+        transactions = get_today_transactions()
+        total_spent = sum(float(t['amount']) for t in transactions)
+        is_alert = total_spent > SPENDING_LIMIT
+        
+        ai_analysis = invoke_nova_ai(transactions, total_spent, is_alert)
+        
+        subject = f"{'🚨 ALERT' if is_alert else '✅ UPDATE'}: {total_spent}€ - {datetime.now().strftime('%d %b')}"
+        
+        html_body = generate_html_email(subject, ai_analysis, total_spent, is_alert, transactions)
+        
+        ses.send_email(
+            Source=USER_EMAIL,
+            Destination={'ToAddresses': [USER_EMAIL]},
+            Message={
+                'Subject': {'Data': subject},
+                'Body': {
+                    'Html': {'Data': html_body},
+                    'Text': {'Data': ai_analysis} 
+                }
+            }
+        )
+        
+        return {'statusCode': 200, 'body': json.dumps('Email HTML sent!')}
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return {'statusCode': 500, 'body': json.dumps(f"Error: {str(e)}")}

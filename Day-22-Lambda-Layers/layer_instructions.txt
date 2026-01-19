@@ -1,0 +1,25 @@
+AWS Lambda Layer Setup Guide
+
+To run the banking integration scripts in the cloud, the standard AWS Lambda environment wasn't enough because it lacks the 'plaid-python' and 'requests' libraries. 
+
+Instead of bloating the main function code, I built a custom Lambda Layer. This keeps the deployment clean and allows me to reuse these libraries across other functions if needed.
+
+Here is the process I followed to package the dependencies for Python 3.13:
+
+1. Directory Structure
+AWS requires a specific folder structure for Python layers. I created it using:
+$ mkdir -p python/lib/python3.13/site-packages
+
+2. Installing Dependencies
+I installed the required libraries directly into that target folder:
+$ pip3 install plaid-python requests -t python/lib/python3.13/site-packages
+
+3. Packaging
+Once installed, I zipped the 'python' directory to create the layer artifact:
+$ zip -r fintech_libs.zip python
+
+4. Deployment
+- Uploaded 'fintech_libs.zip' to the AWS Lambda Console > Layers.
+- Attached the new layer to the 'FinanceAgent-Brain' function.
+
+Note: Ensure the Python version selected in the Lambda Runtime matches the version used to build the layer (3.13 in this case) to avoid import errors.
