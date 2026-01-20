@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Finance Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Inter', 'sans-serif'],
+            },
+            animation: {
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            }
+          },
+        },
+      }
+    </script>
+    <style>
+        /* Custom styles for smoother transitions not easily handled by utility classes alone */
+        .fade-enter { opacity: 0; transform: translateY(10px); }
+        .fade-enter-active { opacity: 1; transform: translateY(0); transition: opacity 300ms, transform 300ms; }
+        .fade-exit { opacity: 1; transform: translateY(0); }
+        .fade-exit-active { opacity: 0; transform: translateY(10px); transition: opacity 300ms, transform 300ms; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react/": "https://esm.sh/react@^19.2.3/"
+  }
+}
+</script>
+</head>
+<body class="bg-slate-950 text-slate-200 antialiased selection:bg-indigo-500 selection:text-white min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden">
+
+    <!-- Background Decorative Elements -->
+    <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600/20 rounded-full blur-[100px] pointer-events-none mix-blend-screen animate-pulse-slow"></div>
+    <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-600/10 rounded-full blur-[100px] pointer-events-none mix-blend-screen"></div>
+
+    <!-- Main Card -->
+    <main class="relative w-full max-w-md bg-slate-900/60 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl overflow-hidden ring-1 ring-white/10">
+        
+        <!-- Header Section -->
+        <div class="pt-10 pb-6 px-8 text-center flex flex-col items-center">
+            <div class="relative mb-6 group">
+                <div class="absolute inset-0 bg-indigo-500 blur-xl opacity-20 group-hover:opacity-40 transition-opacity duration-500 rounded-full"></div>
+                <div class="relative bg-gradient-to-br from-indigo-500 to-blue-600 p-4 rounded-2xl shadow-lg border border-white/10">
+                    <!-- Brain Circuit Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-10 h-10 text-white">
+                        <path d="M12 5a3 3 0 1 0-5.997.125 4 4 0 0 0-2.526 5.77 4 4 0 0 0 .556 6.588A4 4 0 1 0 12 18Z" />
+                        <path d="M12 5a3 3 0 1 1 5.997.125 4 4 0 0 1 2.526 5.77 4 4 0 0 1-.556 6.588A4 4 0 1 1 12 18Z" />
+                        <path d="M15 13a4.5 4.5 0 0 1-3-4 4.5 4.5 0 0 1-3 4" />
+                        <path d="M17.599 6.5a3 3 0 0 0 .399-1.375" />
+                        <path d="M6.003 5.125A3 3 0 0 0 6.401 6.5" />
+                        <path d="M3.477 10.896a4 4 0 0 1 .585-.396" />
+                        <path d="M19.938 10.5a4 4 0 0 1 .585.396" />
+                        <path d="M6 18a4 4 0 0 1-1.97-3.284" />
+                        <path d="M17.969 14.716A4 4 0 0 1 16 18" />
+                    </svg>
+                </div>
+            </div>
+            
+            <h1 class="text-2xl font-bold text-white tracking-tight mb-2">Finance Agent</h1>
+            <p class="text-slate-400 text-sm leading-relaxed max-w-[280px]">
+                Securely trigger the AI to audit your bank account transaction history.
+            </p>
+        </div>
+
+        <!-- Action Section -->
+        <div class="px-8 pb-10">
+            <button id="actionBtn" onclick="triggerAgent()" class="w-full relative group overflow-hidden rounded-xl p-4 transition-all duration-300 bg-gradient-to-r from-indigo-600 to-blue-600 border border-transparent hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-500/25">
+                
+                <!-- Button Gradient Hover Effect -->
+                <div id="btnHoverEffect" class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out pointer-events-none"></div>
+
+                <div class="relative flex items-center justify-center gap-3 font-semibold text-white">
+                    <!-- Spinner Icon (Hidden by default) -->
+                    <svg id="spinnerIcon" class="hidden animate-spin w-5 h-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    
+                    <span id="btnText">Run Analysis</span>
+                </div>
+            </button>
+
+            <!-- Status Feedback Area -->
+            <div id="statusContainer" class="mt-6 transition-all duration-500 ease-in-out max-h-0 opacity-0 overflow-hidden">
+                
+                <!-- Success Message -->
+                <div id="successMessage" class="hidden flex items-start gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-200 text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-emerald-400 shrink-0 mt-0.5">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                        <path d="m9 11 3 3L22 4" />
+                    </svg>
+                    <div>
+                        <h3 class="font-semibold text-emerald-400 mb-1">Audit Successful</h3>
+                        <p class="opacity-80">The comprehensive report has been generated. Please check your email inbox.</p>
+                    </div>
+                </div>
+
+                <!-- Error Message -->
+                <div id="errorMessage" class="hidden flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-200 text-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5 text-red-400 shrink-0 mt-0.5">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" x2="12" y1="8" y2="12" />
+                        <line x1="12" x2="12.01" y1="16" y2="16" />
+                    </svg>
+                    <div>
+                        <h3 class="font-semibold text-red-400 mb-1">Connection Failed</h3>
+                        <p id="errorText" class="opacity-80">Could not connect to Agent.</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+        
+        <!-- Footer info -->
+        <div class="bg-slate-900/50 border-t border-slate-800 p-3 text-center">
+            <p class="text-xs text-slate-600 font-medium">Secured by End-to-End Encryption</p>
+        </div>
+    </main>
+
+    <script>
+        const API_URL = "PLACEHOLDER"; 
+
+        async function triggerAgent() {
+            // DOM Elements
+            const btn = document.getElementById('actionBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('spinnerIcon');
+            const hoverEffect = document.getElementById('btnHoverEffect');
+            const statusContainer = document.getElementById('statusContainer');
+            const successMessage = document.getElementById('successMessage');
+            const errorMessage = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+
+            // Reset UI State
+            statusContainer.classList.remove('max-h-40', 'opacity-100');
+            statusContainer.classList.add('max-h-0', 'opacity-0');
+            
+            // Wait for collapse animation before switching content (optional but looks better)
+            await new Promise(r => setTimeout(r, 200)); 
+            successMessage.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+
+            // Set Loading State
+            btn.disabled = true;
+            btn.classList.add('cursor-not-allowed', 'opacity-90');
+            btn.classList.remove('hover:-translate-y-0.5', 'hover:shadow-lg');
+            btnText.innerText = "Running Analysis...";
+            spinner.classList.remove('hidden');
+            
+            try {
+                // Artificial Delay for better UX
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) {
+                    throw new Error("Server Error");
+                }
+                
+                const data = await response.json();
+                
+                // Success State
+                showStatus(true);
+                setButtonSuccess();
+
+            } catch (error) {
+                console.error(error);
+                let msg = "Could not connect to the Finance Agent.";
+                if (API_URL === "") msg = "Configuration Error: API URL is missing.";
+                
+                // Error State
+                errorText.innerText = msg;
+                showStatus(false);
+                resetButtonError();
+            }
+        }
+
+        function showStatus(isSuccess) {
+            const statusContainer = document.getElementById('statusContainer');
+            const successMessage = document.getElementById('successMessage');
+            const errorMessage = document.getElementById('errorMessage');
+
+            if (isSuccess) {
+                successMessage.classList.remove('hidden');
+                errorMessage.classList.add('hidden');
+            } else {
+                successMessage.classList.add('hidden');
+                errorMessage.classList.remove('hidden');
+            }
+
+            // Expand container
+            statusContainer.classList.remove('max-h-0', 'opacity-0');
+            statusContainer.classList.add('max-h-40', 'opacity-100');
+        }
+
+        function setButtonSuccess() {
+            const btn = document.getElementById('actionBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('spinnerIcon');
+            const hoverEffect = document.getElementById('btnHoverEffect');
+
+            spinner.classList.add('hidden');
+            btnText.innerText = "Analysis Complete";
+            btnText.classList.add('text-emerald-400');
+            
+            // Change button style to success
+            btn.classList.remove('bg-gradient-to-r', 'from-indigo-600', 'to-blue-600');
+            btn.classList.add('bg-emerald-600/10', 'border-emerald-500/50', 'cursor-default');
+            
+            // Keep disabled but look nice
+            btn.disabled = true;
+            hoverEffect.style.display = 'none'; // Hide hover effect
+        }
+
+        function resetButtonError() {
+            const btn = document.getElementById('actionBtn');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('spinnerIcon');
+
+            spinner.classList.add('hidden');
+            btnText.innerText = "Retry Analysis";
+            
+            // Re-enable button
+            btn.disabled = false;
+            btn.classList.remove('cursor-not-allowed', 'opacity-90');
+            btn.classList.add('hover:-translate-y-0.5', 'hover:shadow-lg');
+        }
+    </script>
+</body>
+</html>

@@ -16,6 +16,7 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **23** | [Frontend Integration & Prompt Engineering](./Day-23-Frontend-Connect) | `API Gateway` `Bedrock` `Prompting` | Connected a web frontend to Lambda via Function URL. Refined AI persona with prompt engineering to avoid safety filters. |
 | **22** | [Serverless Dependency Injection](./Day-22-Lambda-Layers) | `AWS Lambda Layers` `Zip Packaging` | Migrated local scripts to the cloud. Created and deployed a custom Lambda Layer to inject external Python libraries (`plaid-python`) into the serverless environment. |
 | **21** | [Hybrid Banking Connector](./Day-21-Bank-Connectors) | `Python` `Plaid API` `Wise API` | Overcame API restrictions by architecting a hybrid solution: Plaid Sandbox for UI data simulation and Wise API for real-time production monitoring. |
 | **20** | [Pro HTML Emails with SES](./Day-20-SES-HTML-Emails) | `Amazon SES` `Python` `HTML/CSS` | Replaced SNS plain text with rich HTML email templates. Configured dynamic dark mode alerts and prompt engineering for actionable advice. |
