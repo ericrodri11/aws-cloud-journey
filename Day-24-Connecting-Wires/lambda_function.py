@@ -26,7 +26,7 @@ PLAID_SECRET = os.environ.get('PLAID_SECRET')
 USER_EMAIL = os.environ.get('USER_EMAIL', 'ericridri11@gmail.com') 
 SPENDING_LIMIT = 100.00
 USER_ID = "user_eric" 
-DAYS_LOOKBACK = 30 
+DAYS_LOOKBACK_DASHBOARD = 30 # Miramos 30 días para llenar los gráficos
 
 # --- CLIENTES AWS ---
 dynamodb = boto3.resource('dynamodb', region_name=REGION_RESOURCE)
@@ -62,14 +62,15 @@ def ingest_plaid_data():
     print("⏳ Waiting 2s for Plaid...")
     time.sleep(2) 
     
-    start_date = (datetime.datetime.now() - datetime.timedelta(days=DAYS_LOOKBACK)).date()
+    # Traemos 30 días para llenar la App
+    start_date = (datetime.datetime.now() - datetime.timedelta(days=DAYS_LOOKBACK_DASHBOARD)).date()
     end_date = datetime.datetime.now().date()
     
     request = TransactionsGetRequest(
         access_token=access_token,
         start_date=start_date,
         end_date=end_date,
-        options=TransactionsGetRequestOptions(count=5) 
+        options=TransactionsGetRequestOptions(count=50) 
     )
     response = client.transactions_get(request)
     return response['transactions']
@@ -99,9 +100,10 @@ def save_to_dynamo(transactions):
 # ==========================================
 
 def invoke_nova_ai(transactions, total_spent, is_alert):
+    # Lógica de tono sarcástico
     if is_alert:
         tone_instruction = """
-        CRITICAL: The user spent TOO MUCH. You are a tough, sarcastic financial coach.
+        CRITICAL: The user spent TOO MUCH yesterday. You are a tough, sarcastic financial coach.
         Talk directly to 'Eric' (use "You"). Never refer to him as "user_eric".
         
         LOGIC FOR ANALYSIS:
@@ -109,15 +111,14 @@ def invoke_nova_ai(transactions, total_spent, is_alert):
         2. If 'Uber' appears and cost < 10: Ask why he didn't walk. 
         3. If 'Uber' appears and cost > 10: Ask why he didn't take the bus.
         4. If 'Gusto' appears (income): Acknowledge it, but warn him not to blow it all at once.
-        5. DO NOT hallucinate expenses that are not in the list.
         """
     else:
-        tone_instruction = "Eric is doing well. Congratulate him briefly, but tell him not to get cocky."
+        tone_instruction = "Eric is doing well with low spending yesterday. Congratulate him briefly, but tell him not to get cocky."
 
     prompt = f"""
     Act as a TOUGH personal financial advisor talking to Eric.
-    Analyze these expenses: {json.dumps(transactions, default=str)}
-    Total (Last {DAYS_LOOKBACK} days): {total_spent} EUR.
+    Analyze YESTERDAY'S expenses: {json.dumps(transactions, default=str)}
+    Total Spent Yesterday: {total_spent} EUR.
     
     {tone_instruction}
     
@@ -153,19 +154,13 @@ def invoke_nova_ai(transactions, total_spent, is_alert):
 
 def generate_html_email(subject, ai_analysis, total_spent, is_alert, transactions):
     color = "#ef4444" if is_alert else "#10b981" 
-    status_text = "🚨 High Spending Alert" if is_alert else "✅ Balance Update"
+    status_text = "🚨 High Daily Spending" if is_alert else "✅ Daily Balance Update"
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # --- PREHEADER MEJORADO ---
-    # 1. Limpiamos HTML del análisis para tener texto plano
     summary_clean = ai_analysis.replace("<h3><b>Summary:</b></h3>", "").replace("<p>", "").replace("</p>", "").replace("<h3><b>Advice:</b></h3>", "")
-    summary_clean = summary_clean[:90] # Primeros 90 caracteres
+    summary_clean = summary_clean[:90] 
     
-    # 2. Texto de previsualización forzado
     preview_text = f"{status_text} | Total: {total_spent:.2f}€. {summary_clean}..."
-    
-    # 3. Hack de espacios vacíos para empujar el texto predeterminado fuera de la vista
-    # Esto asegura que SOLO se vea tu preview
     padding = "&zwnj;&nbsp;" * 50
     
     preheader_block = f"""
@@ -197,7 +192,7 @@ def generate_html_email(subject, ai_analysis, total_spent, is_alert, transaction
         tx_section = f"""
         <div style="margin-bottom: 24px; margin-top: 30px;">
             <h3 style="color: #94a3b8; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #475569; padding-bottom: 8px; margin-bottom: 10px;">
-                Latest Transactions ({DAYS_LOOKBACK} Days)
+                Yesterday's Activity
             </h3>
             {tx_rows}
         </div>
@@ -218,7 +213,7 @@ def generate_html_email(subject, ai_analysis, total_spent, is_alert, transaction
             
             <div style="padding: 24px;">
                 <div style="background-color: #334155; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 25px;">
-                    <span style="display: block; font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; margin-bottom: 5px;">Total Spent ({DAYS_LOOKBACK} Days)</span>
+                    <span style="display: block; font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px; margin-bottom: 5px;">Yesterday's Spend</span>
                     <span style="display: block; font-size: 36px; font-weight: 800; color: white;">{total_spent:.2f} €</span>
                 </div>
                 
@@ -235,24 +230,29 @@ def generate_html_email(subject, ai_analysis, total_spent, is_alert, transaction
 
 def lambda_handler(event, context):
     try:
-        # 1. INGEST
-        print("🚀 Step 1: Starting Ingestion...")
-        transactions = ingest_plaid_data()
+        # 1. INGEST (Traemos 30 días para la App)
+        print("🚀 Step 1: Starting Ingestion (30 Days)...")
+        transactions_full = ingest_plaid_data()
         
         # 2. STORE
-        print(f"📦 Step 2: Saving {len(transactions)} transactions...")
-        saved_items = save_to_dynamo(transactions)
+        print(f"📦 Step 2: Saving {len(transactions_full)} transactions...")
+        saved_items_full = save_to_dynamo(transactions_full)
         
-        # 3. ANALYZE
-        total_spent = sum(float(t['amount']) for t in saved_items)
-        is_alert = total_spent > SPENDING_LIMIT
-        print(f"🧠 Step 3: Analyzing {total_spent}€ with AI...")
-        ai_analysis = invoke_nova_ai(saved_items, total_spent, is_alert)
+        # 3. FILTER FOR EMAIL (Solo ayer)
+        yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        # Filtramos la lista completa para quedarnos solo con lo de ayer (o hoy)
+        daily_items = [t for t in saved_items_full if t['transaction_date'] >= yesterday]
         
-        # 4. NOTIFY
-        # Asunto simplificado para móvil, el detalle va en el preheader
-        subject = f"{'🚨' if is_alert else '✅'} Alert: {total_spent:.2f}€ - {datetime.datetime.now().strftime('%d %b')}"
-        html_body = generate_html_email(subject, ai_analysis, total_spent, is_alert, saved_items)
+        # 4. ANALYZE (Solo lo diario para no confundir a la IA)
+        total_daily_spent = sum(float(t['amount']) for t in daily_items)
+        is_alert = total_daily_spent > SPENDING_LIMIT
+        
+        print(f"🧠 Step 3: Analyzing Daily Spend ({total_daily_spent}€) with AI...")
+        ai_analysis = invoke_nova_ai(daily_items, total_daily_spent, is_alert)
+        
+        # 5. NOTIFY (Email con datos diarios)
+        subject = f"{'🚨' if is_alert else '✅'} Alert: {total_daily_spent:.2f}€ - {datetime.datetime.now().strftime('%d %b')}"
+        html_body = generate_html_email(subject, ai_analysis, total_daily_spent, is_alert, daily_items)
         
         ses.send_email(
             Source=USER_EMAIL,
@@ -263,8 +263,32 @@ def lambda_handler(event, context):
             }
         )
         
-        return {'statusCode': 200, 'body': json.dumps(f"✅ Success! {len(saved_items)} txs processed.")}
+        # 6. RETURN PAYLOAD FOR FRONTEND
+        response_payload = {
+            "status": "success",
+            "data": {
+                "transactions": saved_items_full,
+                "ai_analysis": ai_analysis,
+                "total_monthly_spent": sum(float(t['amount']) for t in saved_items_full)
+            }
+        }
+
+        # MODIFICACIÓN: Quitamos los headers CORS manuales porque la Consola de AWS ya los pone.
+        # Si los dejamos aquí, se duplican y falla.
+        return {
+            'statusCode': 200,
+            'headers': {
+                "Content-Type": "application/json"
+            },
+            'body': json.dumps(response_payload, default=str)
+        }
         
     except Exception as e:
         print(f"❌ Critical Error: {str(e)}")
-        return {'statusCode': 500, 'body': json.dumps(f"Error: {str(e)}")}
+        return {
+            'statusCode': 500, 
+            'headers': {
+                "Access-Control-Allow-Origin": "*",
+            },
+            'body': json.dumps(f"Error: {str(e)}")
+        }

@@ -16,6 +16,10 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **27** | [Predictive Analytics Module](./Day-27-Predictive-Analytics) | `Python` `Math` `Forecasting` | Shifted from descriptive to predictive analytics. Implemented a linear projection engine to forecast month-end spending based on daily velocity. |
+| **26** | [AI Financial Scoring Engine](./Day-26-Scoring-Engine) | `Python` `Algorithms` `Gamification` | Built a custom credit-bureau algorithm. It calculates a "Financial Health Score" (0-100) based on savings rate and cashflow, providing a transparent audit log. |
+| **25** | [Pro UI Visualization](./Day-25-Pro-Dashboard) | `React` `Recharts` `Tailwind` | Upgraded the dashboard from basic lists to professional Data Visualization. Implemented Donut Charts with auto-categorization and dynamic color mapping. |
+| **24** | [Backend Logic & Email Refactor](./Day-24-Connecting-Wires) | `Python` `HTML/CSS` `Logic` | Refactored the notification system to handle complex logic. Designed "Tough Love" AI prompts and fixed synchronized data parsing between Frontend and Backend. |
 | **23** | [Frontend Integration & Prompt Engineering](./Day-23-Frontend-Connect) | `API Gateway` `Bedrock` `Prompting` | Connected a web frontend to Lambda via Function URL. Refined AI persona with prompt engineering to avoid safety filters. |
 | **22** | [Serverless Dependency Injection](./Day-22-Lambda-Layers) | `AWS Lambda Layers` `Zip Packaging` | Migrated local scripts to the cloud. Created and deployed a custom Lambda Layer to inject external Python libraries (`plaid-python`) into the serverless environment. |
 | **21** | [Hybrid Banking Connector](./Day-21-Bank-Connectors) | `Python` `Plaid API` `Wise API` | Overcame API restrictions by architecting a hybrid solution: Plaid Sandbox for UI data simulation and Wise API for real-time production monitoring. |
