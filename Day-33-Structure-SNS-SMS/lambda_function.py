@@ -1,0 +1,660 @@
+import json
+import boto3
+import os
+import datetime
+import time
+import calendar
+import hashlib
+import random 
+from decimal import Decimal
+
+# --- EXTERNAL LIBRARIES ---
+import plaid
+from plaid.api import plaid_api
+from plaid.model.products import Products
+from plaid.model.sandbox_public_token_create_request import SandboxPublicTokenCreateRequest
+from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchangeRequest
+from plaid.model.transactions_get_request import TransactionsGetRequest
+from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
+
+# --- CONFIGURATION ---
+REGION_RESOURCE = 'eu-north-1'
+REGION_BEDROCK = 'us-east-1' 
+TABLE_NAME = "FinanceAgent-Transactions"
+CACHE_TABLE_NAME = "FinanceAgent-Cache"
+MODEL_ID = "amazon.nova-micro-v1:0"
+
+# VARIABLES
+PLAID_CLIENT_ID = os.environ.get('PLAID_CLIENT_ID')
+PLAID_SECRET = os.environ.get('PLAID_SECRET')
+USER_EMAIL = os.environ.get('USER_EMAIL', 'ericridri11@gmail.com') 
+SPENDING_LIMIT = 100.00
+USER_ID = "user_eric" 
+DAYS_LOOKBACK = 30 
+CACHE_TTL_HOURS = 1 
+SNS_TOPIC_ARN = "arn:aws:sns:eu-north-1:723013807294:FinanceAgent-Alerts"
+
+# --- CLIENTES ---
+dynamodb = boto3.resource('dynamodb', region_name=REGION_RESOURCE)
+table = dynamodb.Table(TABLE_NAME)
+cache_table = dynamodb.Table(CACHE_TABLE_NAME)  # ⚡ CLIENTE DE CACHÉ
+ses = boto3.client('ses', region_name=REGION_RESOURCE)
+bedrock = boto3.client(service_name='bedrock-runtime', region_name=REGION_BEDROCK)
+sns = boto3.client('sns', region_name=REGION_RESOURCE)
+
+configuration = plaid.Configuration(
+    host=plaid.Environment.Sandbox,
+    api_key={'clientId': PLAID_CLIENT_ID, 'secret': PLAID_SECRET}
+)
+api_client = plaid.ApiClient(configuration)
+client = plaid_api.PlaidApi(api_client)
+
+# --- HELPER: STRUCTURED LOGGING ---
+def log_metric(metric_name, value, unit="Count", properties={}):
+    """Genera un log estructurado JSON que CloudWatch puede analizar."""
+    log_entry = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "metric": metric_name,
+        "value": value,
+        "unit": unit,
+        "user_id": USER_ID,
+        **properties
+    }
+    print(json.dumps(log_entry))
+
+# --- HELPER: FINOPS (CALCULADORA DE COSTOS) ---
+def calculate_and_log_cost(response_body, mode):
+    """Calcula el costo de la llamada a Bedrock y lo loguea."""
+    try:
+        usage = response_body.get('usage', {})
+        input_tokens = usage.get('inputTokens', 0)
+        output_tokens = usage.get('outputTokens', 0)
+        
+        # Precios Amazon Nova Micro (us-east-1, Enero 2026)
+        cost_input = (input_tokens / 1000) * 0.00035
+        cost_output = (output_tokens / 1000) * 0.00140
+        total_cost = round(cost_input + cost_output, 7)
+        
+        log_metric("AICost", total_cost, unit="USD", properties={
+            "mode": mode,
+            "tokens_in": input_tokens,
+            "tokens_out": output_tokens
+        })
+    except Exception as e:
+        print(json.dumps({"level": "WARN", "msg": "Cost calc failed", "details": str(e)}))
+
+# ==========================================
+# ⚡ PART 0.5: SISTEMA DE CACHÉ
+# ==========================================
+def generate_cache_key(transactions, monthly_income, monthly_expenses, mode="dashboard"):
+    """
+    Genera una 'huella digital' única basada en:
+    - Las transacciones actuales
+    - Ingresos/Gastos del mes
+    - Modo (dashboard vs chat)
+    
+    Si los datos son EXACTAMENTE iguales, devuelve la misma clave.
+    """
+    data_fingerprint = {
+        "user_id": USER_ID,
+        "mode": mode,
+        "income": str(monthly_income),
+        "expenses": str(monthly_expenses),
+        "transactions": [
+            {"date": t['transaction_date'], "amount": t['amount'], "desc": t['description']}
+            for t in transactions
+        ]
+    }
+    
+    # Convertir a JSON ordenado y generar hash SHA256
+    json_str = json.dumps(data_fingerprint, sort_keys=True, default=str)
+    cache_key = hashlib.sha256(json_str.encode()).hexdigest()
+    
+    return cache_key
+
+def get_cached_response(cache_key):
+    """
+    Busca en DynamoDB si existe una respuesta cacheada VÁLIDA.
+    Retorna (mensaje, True) si existe y está vigente.
+    Retorna (None, False) si no existe o expiró.
+    """
+    try:
+        response = cache_table.get_item(Key={'cache_key': cache_key})
+        
+        if 'Item' not in response:
+            log_metric("CacheMiss", 1)
+            return None, False
+        
+        item = response['Item']
+        cached_time = datetime.datetime.fromisoformat(item['timestamp'])
+        now = datetime.datetime.now()
+        
+        # Verificar si la caché expiró
+        time_diff = (now - cached_time).total_seconds() / 3600  # horas
+        
+        if time_diff > CACHE_TTL_HOURS:
+            log_metric("CacheExpired", 1, properties={"age_hours": time_diff})
+            return None, False
+        
+        log_metric("CacheHit", 1, properties={"age_minutes": time_diff * 60})
+        return item['response'], True
+        
+    except Exception as e:
+        print(json.dumps({"level": "WARN", "msg": "Cache read failed", "details": str(e)}))
+        return None, False
+
+def save_to_cache(cache_key, response_text):
+    """Guarda la respuesta de la IA en DynamoDB con TTL de 1 hora."""
+    try:
+        ttl_timestamp = int(time.time()) + (CACHE_TTL_HOURS * 3600)
+        
+        cache_table.put_item(Item={
+            'cache_key': cache_key,
+            'response': response_text,
+            'timestamp': datetime.datetime.now().isoformat(),
+            'ttl': ttl_timestamp,
+            'user_id': USER_ID
+        })
+        
+        log_metric("CacheSaved", 1)
+    except Exception as e:
+        print(json.dumps({"level": "WARN", "msg": "Cache save failed", "details": str(e)}))
+
+# ==========================================
+# PART 0: SCORING & FORECAST ENGINE
+# ==========================================
+def calculate_financial_score(income, expenses):
+    score = 50 
+    short_reasons = []
+    audit_log = ["Base: 50 Points (Default start)."]
+    feedback = ""
+    
+    if income <= 0:
+        savings_rate = 0
+    else:
+        savings = income - expenses
+        savings_rate = (savings / income) * 100
+
+    if savings_rate >= 50: 
+        score += 40
+        short_reasons.append("🔥 High Savings Rate (+40)")
+        audit_log.append(f"Savings (+40): Elite savings rate of {savings_rate:.1f}%.")
+        feedback = "Outstanding! You're saving >50% of income."
+    elif savings_rate >= 20: 
+        score += 20
+        short_reasons.append("✅ Healthy Savings (+20)")
+        audit_log.append(f"Savings (+20): Healthy savings rate of {savings_rate:.1f}%.")
+        feedback = "Solid habits. Keep building the nest egg."
+    elif savings_rate > 0: 
+        score += 10
+        short_reasons.append("👍 Positive Cashflow (+10)")
+        audit_log.append("Savings (+10): Positive cashflow, but tight margins.")
+        feedback = "Profitable, but watch your margins."
+    else: 
+        score -= 20
+        short_reasons.append("⚠️ Negative Cashflow (-20)")
+        audit_log.append("Penalty (-20): Expenses exceeded Income.")
+        feedback = "Critical: You spent more than you earned."
+    
+    if expenses < 500:
+        score += 10
+        short_reasons.append("🛡️ Frugal Month (+10)")
+        audit_log.append("Frugality (+10): Low absolute volume (<500€).")
+    elif expenses > 4000:
+        score -= 5
+        short_reasons.append("💸 High Volume (-5)")
+        audit_log.append("Penalty (-5): High Volume (>4000€).")
+        
+    return max(0, min(100, int(score))), short_reasons, audit_log, feedback
+
+def calculate_projection(current_expenses):
+    today = datetime.date.today()
+    _, days_in_month = calendar.monthrange(today.year, today.month)
+    day_of_month = today.day
+    if day_of_month == 0: return current_expenses
+    daily_avg = current_expenses / day_of_month
+    return round(daily_avg * days_in_month, 2)
+
+# ==========================================
+# PART 1: INGESTION
+# ==========================================
+def ingest_plaid_data():
+    log_metric("PlaidConnectionStart", 1)
+    pt_request = SandboxPublicTokenCreateRequest(
+        institution_id='ins_109508', 
+        initial_products=[Products('transactions')]
+    )
+    pt_response = client.sandbox_public_token_create(pt_request)
+    public_token = pt_response['public_token']
+    
+    exchange_response = client.item_public_token_exchange(ItemPublicTokenExchangeRequest(public_token=public_token))
+    access_token = exchange_response['access_token']
+    
+    time.sleep(2) 
+    
+    start_date = (datetime.datetime.now() - datetime.timedelta(days=DAYS_LOOKBACK)).date()
+    end_date = datetime.datetime.now().date()
+    
+    request = TransactionsGetRequest(
+        access_token=access_token,
+        start_date=start_date,
+        end_date=end_date,
+        options=TransactionsGetRequestOptions(count=50) 
+    )
+    response = client.transactions_get(request)
+    return response['transactions']
+
+def save_to_dynamo(transactions):
+    saved_items = []
+    for t in transactions:
+        try:
+            item = {
+                'user_id': USER_ID,
+                'transaction_date': str(t['date']),
+                'transaction_id': t['transaction_id'],
+                'amount': str(t['amount']),
+                'description': t['name'],
+                'currency': t['iso_currency_code'],
+                'category': t['category'][0] if t['category'] else "Uncategorized"
+            }
+            table.put_item(Item=item)
+            saved_items.append(item)
+        except Exception as e:
+            print(json.dumps({"level": "ERROR", "msg": "DynamoDB Save Error", "details": str(e)}))
+    
+    log_metric("TransactionsSaved", len(saved_items))
+    return saved_items
+
+# ==========================================
+# PART 2: AI BRAIN (RECUPERADO TONO SARCÁSTICO)
+# ==========================================
+def invoke_nova_ai(daily_txs, total_daily_spent, monthly_income, monthly_expenses, user_query=None):
+    """
+    ⚠️ MUY IMPORTANTE: CONSERVAR LA LÓGICA DE AGENTE SARCÁSTICO Y CRÍTICO
+    - Respuestas cortas (máx 2-3 frases)
+    - Tono directo y mordaz
+    - Referencias personales cuando sea relevante
+    - Sin rodeos ni politeness artificial
+    """
+    
+    start_time = time.time()
+    
+    # --- MODO 1: CHAT INTERACTIVO (NO SE CACHEA) ---
+    if user_query:
+        log_metric("AIChatRequest", 1)
+        
+        # ⚠️ TONO RECUPERADO: Sarcástico, directo, personal
+        prompt = f"""
+        You are Eric's brutal personal financial advisor. No sugar-coating.
+        
+        Context:
+        - Monthly Income: {monthly_income:.2f}€
+        - Monthly Expenses: {monthly_expenses:.2f}€
+        - Recent Activity: {json.dumps(daily_txs[:5], default=str)}
+        
+        USER QUESTION: "{user_query}"
+        
+        RULES:
+        1. Call him "Eric" or "you" - be personal
+        2. Max 2 sentences. Be sharp and ironic
+        3. If he asks about Starbucks/Uber/AWS - roast him specifically
+        4. No corporate talk - you're his tough friend, not a chatbot
+        
+        Answer:
+        """
+        try:
+            resp = bedrock.invoke_model(
+                body=json.dumps({
+                    "messages": [{"role": "user", "content": [{"text": prompt}]}], 
+                    "inferenceConfig": {"max_new_tokens": 100, "temperature": 0.8}
+                }),
+                modelId=MODEL_ID
+            )
+            body_json = json.loads(resp.get("body").read())
+            response_text = body_json['output']['message']['content'][0]['text']
+            
+            calculate_and_log_cost(body_json, "chat")
+            duration = time.time() - start_time
+            log_metric("AILatency", duration, unit="Seconds", properties={"mode": "chat"})
+            
+            return response_text, ""
+        except Exception as e:
+            print(json.dumps({"level": "ERROR", "msg": "Bedrock Chat Error", "details": str(e)}))
+            return "I'm ignoring you right now (System Error).", ""
+
+    # --- MODO 2: ANÁLISIS AUTOMÁTICO (SE CACHEA) ---
+    log_metric("AIDashboardRequest", 1)
+    net_surplus = monthly_income - monthly_expenses
+    
+    # ⚠️ PROMPT RECUPERADO: Tono crítico y sarcástico del código antiguo
+    dashboard_prompt = f"""
+    You are Eric's sarcastic financial AI.
+    
+    Net Surplus: {net_surplus:.2f}€ this month.
+    
+    Write ONE sharp sentence celebrating or criticizing this amount.
+    Max 120 chars. Be witty. Reference his surplus specifically.
+    """
+    
+    # ⚠️ LÓGICA RECUPERADA: Análisis crítico por categoría
+    email_tone = "CRITICAL: Eric spent TOO MUCH. Roast him hard." if total_daily_spent > 50 else "Eric spent little. Suspicious. Investigate."
+    
+    # Detectar categorías específicas para crítica personalizada
+    has_starbucks = any('starbucks' in t['description'].lower() for t in daily_txs)
+    has_uber = any('uber' in t['description'].lower() for t in daily_txs)
+    has_aws = any('aws' in t['description'].lower() or 'amazon' in t['description'].lower() for t in daily_txs)
+    
+    specific_instructions = ""
+    if has_starbucks:
+        specific_instructions += "- STARBUCKS DETECTED: Ask if he thinks he's a millionaire wasting money on overpriced coffee.\n"
+    if has_uber:
+        uber_amount = next((float(t['amount']) for t in daily_txs if 'uber' in t['description'].lower()), 0)
+        if uber_amount < 10:
+            specific_instructions += "- CHEAP UBER: Ask why he didn't just walk.\n"
+        else:
+            specific_instructions += "- EXPENSIVE UBER: Ask why he didn't take the bus.\n"
+    if has_aws:
+        specific_instructions += "- AWS/TECH BILLS: Question if this excessive cloud spending is truly necessary.\n"
+
+    email_prompt = f"""
+    Act as Eric's TOUGH personal financial advisor. No politeness.
+
+    Expenses: {json.dumps(daily_txs, default=str)}
+    Total: {total_daily_spent}€
+
+    {email_tone}
+
+    SPECIFIC CRITIQUES:
+    {specific_instructions if specific_instructions else "- Be suspicious of any unnecessary spending."}
+
+    FORMATTING (Strict HTML):
+    1. <h3><b>Summary:</b></h3> [Sharp paragraph criticizing the spending, max 3 sentences]
+    2. <h3><b>Advice:</b></h3> [ACTIONABLE financial recommendation based on the expenses - suggest specific budget limits, alternatives, or spending rules. Keep it sharp but professional. Max 3 sentences]
+
+    IMPORTANT FOR ADVICE SECTION:
+    - DO give concrete financial advice (e.g., "Set a €200/week food budget", "Cancel subscriptions you don't use", "Use public transport instead of Uber")
+    - DO reference specific expense categories from the data
+    - DO maintain critical tone BUT provide professional guidance
+    - DON'T just criticize - give him a path forward
+
+    Use <p> tags. NO markdown. Be concise and brutal but USEFUL.
+
+    DO NOT hallucinate expenses not in the list.
+    """
+    
+    try:
+        # LLAMADA 1: Dashboard
+        resp_dash = bedrock.invoke_model(
+            body=json.dumps({
+                "messages": [{"role": "user", "content": [{"text": dashboard_prompt}]}], 
+                "inferenceConfig": {"max_new_tokens": 80, "temperature": 0.8}
+            }),
+            modelId=MODEL_ID
+        )
+        body_dash = json.loads(resp_dash.get("body").read())
+        dash_text = body_dash['output']['message']['content'][0]['text']
+        calculate_and_log_cost(body_dash, "dashboard_short")
+        
+        # LLAMADA 2: Email
+        resp_email = bedrock.invoke_model(
+            body=json.dumps({
+                "messages": [{"role": "user", "content": [{"text": email_prompt}]}], 
+                "inferenceConfig": {"max_new_tokens": 400, "temperature": 0.8}
+            }),
+            modelId=MODEL_ID
+        )
+        body_email = json.loads(resp_email.get("body").read())
+        email_text = body_email['output']['message']['content'][0]['text']
+        calculate_and_log_cost(body_email, "email_tough_love")
+        
+        duration = time.time() - start_time
+        log_metric("AILatency", duration, unit="Seconds", properties={"mode": "full_analysis"})
+        
+        return dash_text.strip(), email_text.replace('```html', '').replace('```', '').strip()
+        
+    except Exception as e:
+        print(json.dumps({"level": "ERROR", "msg": "Bedrock Full Analysis Error", "details": str(e)}))
+        return "System Offline.", f"AI Error: {str(e)}"
+
+# ==========================================
+# PART 3: EMAIL
+# ==========================================
+def generate_html_email(subject, ai_analysis, total_spent, is_alert, transactions):
+    color = "#ef4444" if is_alert else "#10b981" 
+    status_text = "🚨 High Spending" if is_alert else "✅ Balance Update"
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    
+    summary_clean = ai_analysis.replace("<h3><b>Summary:</b></h3>", "").replace("<p>", "").replace("</p>", "").replace("<h3><b>Advice:</b></h3>", "")[:90]
+    preview_text = f"{status_text} | Total: {total_spent:.2f}€. {summary_clean}..."
+    padding = "&zwnj;&nbsp;" * 50
+    preheader_block = f"""<div style="display:none; max-height:0px; overflow:hidden;">{preview_text}{padding}</div>"""
+    
+    if transactions:
+        tx_rows = ""
+        for t in transactions:
+            try:
+                formatted_price = f"{float(t['amount']):.2f}€"
+            except:
+                formatted_price = f"{t['amount']}€"
+
+            tx_rows += f"""
+            <div style="display:flex; justify-content:space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #334155;">
+                <span style="color: #e2e8f0; font-size: 13px; margin-right: 15px; flex: 1;">
+                    {t['description']}
+                </span>
+                <span style="font-weight:bold; color: #f8fafc; font-size: 14px; white-space: nowrap;">
+                    {formatted_price}
+                </span>
+            </div>"""
+        
+        tx_section = f"""
+        <div style="margin-bottom: 24px; margin-top: 30px;">
+            <h3 style="color: #94a3b8; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #475569; padding-bottom: 8px; margin-bottom: 10px;">
+                Latest Activity
+            </h3>
+            {tx_rows}
+        </div>
+        """
+    else:
+        tx_section = ""
+
+    return f"""
+    <html>
+    <body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #0f172a; color: #cbd5e1; padding: 10px;">
+        {preheader_block}
+        <div style="max-width: 600px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);">
+            <div style="background-color: {color}; padding: 25px 20px; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 24px; font-weight: 700;">{status_text}</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 5px 0 0 0; font-size: 14px;">{date_str}</p>
+            </div>
+            <div style="padding: 24px;">
+                <div style="background-color: #334155; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 25px;">
+                    <span style="display: block; font-size: 11px; text-transform: uppercase; color: #94a3b8; letter-spacing: 1px;">Yesterday's Spend</span>
+                    <span style="display: block; font-size: 36px; font-weight: 800; color: white;">{total_spent:.2f} €</span>
+                </div>
+                <div style="margin-bottom: 24px; color: #cbd5e1; line-height: 1.6; font-size: 15px;">
+                    {ai_analysis}
+                </div>
+                {tx_section} 
+            </div>
+        </div>
+    </body>
+    </html>
+    """
+# ==========================================
+# ⚡ HELPER: SMS INTELIGENTE (ANTI-SPAM)
+# ==========================================
+def send_sms_if_needed(amount):
+    """Envía SMS solo si se supera el límite Y no se ha avisado hoy."""
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    lock_key = f"sms_sent_{date_str}"
+    
+    # 1. ¿Ya envié alerta hoy? (Verificar en caché)
+    try:
+        response = cache_table.get_item(Key={'cache_key': lock_key})
+        if 'Item' in response:
+            print("🔕 SMS Alert already sent today. Silencing.")
+            return
+    except Exception as e:
+        print(f"⚠️ Error reading SMS cache: {e}")
+
+# ==========================================
+# ⚡ HELPER: SMS INTELIGENTE (VARIADO & ANTI-SPAM)
+# ==========================================
+def send_sms_if_needed(amount):
+    """Envía SMS solo si se supera el límite Y no se ha avisado hoy."""
+    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
+    lock_key = f"sms_sent_{date_str}"
+    
+    # 1. Check Anti-Spam (Caché)
+    try:
+        response = cache_table.get_item(Key={'cache_key': lock_key})
+        if 'Item' in response:
+            print("🔕 Alerta ya enviada hoy. Silencio para ahorrar.")
+            return
+    except Exception as e:
+        print(f"⚠️ Error leyendo caché SMS: {e}")
+
+    # 2. Selección de Frase Sarcástica Aleatoria
+    # Todas las frases son cortas para mantener el SMS < 160 chars
+    phrases = [
+        "You said you were going to start saving!",
+        "Do you really need that? Seriously?",
+        "Your wallet is crying right now.",
+        "There goes your retirement fund.",
+        "I hope it was worth it.",
+        "Pasta for the rest of the month?",
+        "My CPU hurts seeing this transaction."
+    ]
+    selected_phrase = random.choice(phrases)
+
+    # 3. Enviar SMS
+    try:
+        msg = f"🚨 FINAI ALERT: High spending! You spent {amount:.2f} EUR today. {selected_phrase}"
+        
+        sns.publish(TopicArn=SNS_TOPIC_ARN, Message=msg, Subject="High Spending")
+        print("✅ SMS Enviado correctamente.")
+        
+        # 4. Bloqueo 24h
+        ttl = int(time.time()) + 86400
+        cache_table.put_item(Item={
+            'cache_key': lock_key, 'status': 'sent', 'ttl': ttl, 'user_id': USER_ID 
+        })
+    except Exception as e:
+        print(f"❌ Error enviando SMS: {e}")
+
+# ==========================================
+# LAMBDA HANDLER (CON CACHÉ)
+# ==========================================
+def lambda_handler(event, context):
+    try:
+        # DETECCIÓN DE CHAT
+        query_params = event.get('queryStringParameters')
+        user_query = query_params.get('query') if query_params else None
+
+        transactions = ingest_plaid_data()
+        saved_items = save_to_dynamo(transactions)
+        
+        # Filtro Mes
+        current_month_str = datetime.datetime.now().strftime('%Y-%m')
+        total_income = 0.0
+        total_expenses = 0.0
+        
+        for t in saved_items:
+            if t['transaction_date'].startswith(current_month_str):
+                amount = float(t['amount'])
+                desc = t['description'].lower()
+                is_income = (any(x in desc for x in ['deposit', 'credit', 'payroll', 'gusto', 'refund'])) or amount < 0
+                if is_income: total_income += abs(amount)
+                else: total_expenses += abs(amount)
+        
+        projected_spend = calculate_projection(total_expenses)
+        fin_score, score_short_reasons, score_audit_log, score_feedback = calculate_financial_score(total_income, total_expenses)
+        
+        yesterday = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+        daily_items = [t for t in saved_items if t['transaction_date'] >= yesterday]
+        total_daily_spent = sum(float(t['amount']) for t in daily_items if float(t['amount']) > 0)
+        is_alert = total_daily_spent > SPENDING_LIMIT
+        
+        # ⚡ SISTEMA DE CACHÉ (SOLO DASHBOARD)
+        from_cache = False
+        if not user_query:  # Solo cachear dashboard
+            cache_key = generate_cache_key(saved_items, total_income, total_expenses, "dashboard")
+            cached_message, cache_hit = get_cached_response(cache_key)
+            
+            if cache_hit:
+                dash_message = f"⚡ {cached_message}"  # ⚡ EMOJI DE RAYO
+                email_html_body = cached_message  # Reutilizar mensaje
+                from_cache = True
+                print(json.dumps({"level": "INFO", "msg": "CACHE HIT - Respuesta servida desde memoria"}))
+            else:
+                # Generar nueva respuesta
+                dash_message, email_html_body = invoke_nova_ai(daily_items, total_daily_spent, total_income, total_expenses)
+                save_to_cache(cache_key, dash_message)  # Guardar en caché
+                print(json.dumps({"level": "INFO", "msg": "CACHE MISS - Generando nueva respuesta"}))
+        else:
+            # Chat NO se cachea
+            dash_message, email_html_body = invoke_nova_ai(daily_items, total_daily_spent, total_income, total_expenses, user_query)
+        
+        # ======================================================
+        # ZONA DE NOTIFICACIONES (LÓGICA ANTI-SPAM)
+        # ======================================================
+        
+        if not user_query and not from_cache:
+            # Preparamos el contenido una sola vez
+            subject_daily = f"{'🚨' if is_alert else '✅'} Daily Update: {datetime.datetime.now().strftime('%d %b')}"
+            full_email_html = generate_html_email(subject_daily, email_html_body, total_daily_spent, is_alert, daily_items)
+            
+            # --- 1. REPORTE DIARIO (SOLO A LAS 09:00) ---
+            # Si no pones este 'if', recibirás 24 correos al día.
+            current_hour = datetime.datetime.now().hour
+            if current_hour == 8: # 08:00 UTC = 09:00 España
+                ses.send_email(
+                    Source=USER_EMAIL,
+                    Destination={'ToAddresses': [USER_EMAIL]},
+                    Message={'Subject': {'Data': subject_daily}, 'Body': {'Html': {'Data': full_email_html}, 'Text': {'Data': "HTML req"}}}
+                )
+                print("📧 Reporte Diario enviado a su hora correcta.")
+
+            # --- 2. ALERTA DE GASTO ALTO (CUALQUIER HORA) ---
+            # Esto se ejecuta siempre que la Lambda despierte y vea gasto alto
+            if is_alert:
+                
+                # [ACTIVADO AHORA] SMS Sarcástico
+                # Si en el futuro quieres quitarlo, pon un '#' al inicio de la siguiente línea:
+                send_sms_if_needed(total_daily_spent) 
+
+                # [FUTURO: AHORRO] Email de Alerta
+                # Para activar esto, quita los '#' de abajo:
+                # alert_subject = f"🚨 ALERTA INMEDIATA: Gasto de {total_daily_spent:.2f}€"
+                # ses.send_email(
+                #    Source=USER_EMAIL,
+                #    Destination={'ToAddresses': [USER_EMAIL]},
+                #    Message={'Subject': {'Data': alert_subject}, 'Body': {'Html': {'Data': full_email_html}, 'Text': {'Data': "HTML req"}}}
+                # )
+        
+        response_payload = {
+            "status": "success",
+            "data": {
+                "transactions": saved_items,
+                "dashboard_message": dash_message,
+                "from_cache": from_cache,  # ⚡ Indicador de caché
+                "financial_score": fin_score,
+                "score_short_reasons": score_short_reasons,
+                "score_audit_log": score_audit_log,
+                "score_feedback": score_feedback,
+                "total_income": total_income,
+                "total_expenses": total_expenses,
+                "projected_spend": projected_spend
+            }
+        }
+
+        return {
+            'statusCode': 200,
+            'headers': {"Content-Type": "application/json"},
+            'body': json.dumps(response_payload, default=str)
+        }
+        
+    except Exception as e:
+        print(json.dumps({"level": "CRITICAL", "msg": "Lambda Handler Failed", "details": str(e)}))
+        return {'statusCode': 500, 'body': json.dumps(f"Error: {str(e)}")}
