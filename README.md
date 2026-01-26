@@ -16,6 +16,15 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **36** | [Distributed Tracing (X-Ray)](./Day-36-XRay-Tracing) | `AWS X-Ray` `CloudWatch Service Map` | Enabled Active Tracing to visualize the end-to-end journey of requests. Moved from "guessing" latency to "seeing" bottlenecks in the Service Map. |
+| **35** | [Resilience Patterns (DLQ)](./Day-35-Resilience-DLQ) | `Amazon SQS` `Lambda Async` | Implemented a Dead Letter Queue to catch failed events. Adopted a "Fail Safe" architecture ensuring no financial transaction data is lost during crashes. |
+| **34** | [Zero Trust Security](./Day-34-SSM-Parameters) | `Systems Manager` `IAM` | Migrated sensitive credentials from Environment Variables to encrypted SSM Parameter Store. Hardened security posture by decoupling configuration from code. |
+| **33** | [Observability Cockpit](./Day-33-CloudWatch-Dashboard) | `CloudWatch Logs Insights` `Custom Metrics` | Built a custom dashboard to track AI Latency and Cost per Transaction. Used Structured JSON logging to turn text logs into queryable business data. |
+| **32** | [Smart SMS Alerts](./Day-32-SMS-Logic) | `Amazon SNS` `Python Logic` | Engineered an anti-spam logic using DynamoDB locks to allow hourly checks without bombarding the user. Implemented "High Spending" triggers. |
+| **31** | [Smart Caching System](./Day-31-Caching-Strategy) | `DynamoDB TTL` `Hashing` | Reduced AI costs and latency by implementing a caching layer. Responses for identical financial states are stored and retrieved via SHA-256 hashes. |
+| **30** | [FinOps & Cost Tracking](./Day-30-FinOps-Calculator) | `Python` `CloudWatch` | Implemented real-time cost calculation for GenAI tokens. Logging financial impact per execution to monitor cloud spend against budget. |
+| **29** | [Interactive Chat Mode](./Day-29-Chat-Interface) | `Bedrock` `Prompt Engineering` | Evolved the agent from a static reporter to an interactive chatbot. Configured distinct system prompts for "Analysis" vs "Conversational" modes. |
+| **28** | [Modular Refactoring](./Day-28-Code-Modularity) | `Python` `Clean Code` | Refactored the growing monolithic Lambda into specialized helper functions (Ingestion, Brain, Notification) to improve maintainability. |
 | **27** | [Predictive Analytics Module](./Day-27-Predictive-Analytics) | `Python` `Math` `Forecasting` | Shifted from descriptive to predictive analytics. Implemented a linear projection engine to forecast month-end spending based on daily velocity. |
 | **26** | [AI Financial Scoring Engine](./Day-26-Scoring-Engine) | `Python` `Algorithms` `Gamification` | Built a custom credit-bureau algorithm. It calculates a "Financial Health Score" (0-100) based on savings rate and cashflow, providing a transparent audit log. |
 | **25** | [Pro UI Visualization](./Day-25-Pro-Dashboard) | `React` `Recharts` `Tailwind` | Upgraded the dashboard from basic lists to professional Data Visualization. Implemented Donut Charts with auto-categorization and dynamic color mapping. |
