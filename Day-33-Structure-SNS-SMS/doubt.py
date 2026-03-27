@@ -7,6 +7,8 @@ import calendar
 import hashlib
 import random 
 from decimal import Decimal
+from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 # --- EXTERNAL LIBRARIES ---
 import plaid
@@ -41,6 +43,7 @@ cache_table = dynamodb.Table(CACHE_TABLE_NAME)  # ⚡ CLIENTE DE CACHÉ
 ses = boto3.client('ses', region_name=REGION_RESOURCE)
 bedrock = boto3.client(service_name='bedrock-runtime', region_name=REGION_BEDROCK)
 sns = boto3.client('sns', region_name=REGION_RESOURCE)
+logger = Logger(service="FinanceAgent")
 
 configuration = plaid.Configuration(
     host=plaid.Environment.Sandbox,
@@ -49,18 +52,16 @@ configuration = plaid.Configuration(
 api_client = plaid.ApiClient(configuration)
 client = plaid_api.PlaidApi(api_client)
 
-# --- HELPER: STRUCTURED LOGGING ---
+# --- HELPER: STRUCTURED LOGGING (ACTUALIZADO DÍA 41) ---
 def log_metric(metric_name, value, unit="Count", properties={}):
-    """Genera un log estructurado JSON que CloudWatch puede analizar."""
-    log_entry = {
-        "timestamp": datetime.datetime.now().isoformat(),
-        "metric": metric_name,
-        "value": value,
-        "unit": unit,
+    """Genera un log estructurado JSON usando Powertools."""
+    # En lugar de print(json.dumps), usamos logger.info con estructura
+    logger.info(metric_name, extra={
+        "metric_value": value,
+        "metric_unit": unit,
         "user_id": USER_ID,
         **properties
-    }
-    print(json.dumps(log_entry))
+    })
 
 # --- HELPER: FINOPS (CALCULADORA DE COSTOS) ---
 def calculate_and_log_cost(response_body, mode):
@@ -546,6 +547,7 @@ def send_sms_if_needed(amount):
 # ==========================================
 # LAMBDA HANDLER (CACHÉ vs EMAIL)
 # ==========================================
+@logger.inject_lambda_context(log_event=True)
 def lambda_handler(event, context):
     try:
         # DETECCIÓN DE CHAT
