@@ -16,6 +16,10 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **45** | **Security (IAM Least Privilege)** | Hardened the AWS Lambda execution role. Stripped all `FullAccess` managed policies and implemented a strict, granular JSON inline policy restricting actions to specific DynamoDB tables and SNS topics. Zero blast radius. |
+| **46** | **UX Performance (Frontend Caching)** | Implemented the *Stale-While-Revalidate* pattern in React using `localStorage`. Reduced perceived load time from ~2s to 0.001s. Added dynamic historical date filtering and CSS Skeleton Loaders for cold states. |
+| **44** | WAF Shield & FinOps | AWS WAF CloudFront | Implemented a Web Application Firewall to prevent "Denial of Wallet" attacks. Configured a rate-limiting rule of 50 requests/5min to protect the GenAI budget. |
+| **43** | [React FullStack Integration](./Day-43-React-FullStack-Integration) | React, CloudFront, S3 | Connected the frontend to the Savings Streak engine. Implemented conditional UI rendering based on backend state. |
 | **42** | [Gamification Engine](./Day-42-Gamification-Engine) | `DynamoDB Single Table` `Python` | Overcame stateless serverless limitations by implementing a Savings Streak engine. Stored user profile metadata alongside transactional records securely without adding database bloat. |
 | **41** | [Enterprise Observability](./Day-41-Structured-Logging) | `Lambda Powertools` `CloudWatch Insights` | Migrated from native print statements to structured JSON logging. Injected dynamic user identity into the logging context and AI prompts to enable scalable, queryable monitoring. |
 | **40** | [FinOps & Guardrails](./Day-40-FinOps-Guardrails) | `AWS Budgets` `Cost Explorer` | Implemented a Zero Spend Budget and forecast alarms. Learned the hard way that missing FinOps controls leads to bill shock. Security requires financial boundaries. |
