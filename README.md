@@ -16,8 +16,11 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
-| **45** | **Security (IAM Least Privilege)** | Hardened the AWS Lambda execution role. Stripped all `FullAccess` managed policies and implemented a strict, granular JSON inline policy restricting actions to specific DynamoDB tables and SNS topics. Zero blast radius. |
+| **49** | **Monetization Engine (Cross-Selling)** | `Python` `React` `Lambda` | Engineered a dynamic recommendation engine to simulate Fintech affiliate revenue. Evaluated user cashflow and AI scores to inject targeted financial offers into the frontend. |
+| **48** | **Zero-Trust CI/CD Automation** | `GitHub Actions` `IAM OIDC` | Eliminated ClickOps by building a GitOps pipeline. Secured AWS authentication using OpenID Connect (OIDC) instead of static long-lived credentials, achieving 15-second deployments. |
+| **47** | **CQRS Pattern & Latency Optimization** | `DynamoDB` `Lambda` | Decoupled data ingestion from presentation. Bypassed synchronous third-party API polling during UI loads, reducing dashboard latency from ~3000ms to ~200ms by reading directly from DynamoDB. |
 | **46** | **UX Performance (Frontend Caching)** | Implemented the *Stale-While-Revalidate* pattern in React using `localStorage`. Reduced perceived load time from ~2s to 0.001s. Added dynamic historical date filtering and CSS Skeleton Loaders for cold states. |
+| **45** | **Security (IAM Least Privilege)** | Hardened the AWS Lambda execution role. Stripped all `FullAccess` managed policies and implemented a strict, granular JSON inline policy restricting actions to specific DynamoDB tables and SNS topics. Zero blast radius. |
 | **44** | WAF Shield & FinOps | AWS WAF CloudFront | Implemented a Web Application Firewall to prevent "Denial of Wallet" attacks. Configured a rate-limiting rule of 50 requests/5min to protect the GenAI budget. |
 | **43** | [React FullStack Integration](./Day-43-React-FullStack-Integration) | React, CloudFront, S3 | Connected the frontend to the Savings Streak engine. Implemented conditional UI rendering based on backend state. |
 | **42** | [Gamification Engine](./Day-42-Gamification-Engine) | `DynamoDB Single Table` `Python` | Overcame stateless serverless limitations by implementing a Savings Streak engine. Stored user profile metadata alongside transactional records securely without adding database bloat. |

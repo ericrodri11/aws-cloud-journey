@@ -17,6 +17,7 @@ from plaid.model.item_public_token_exchange_request import ItemPublicTokenExchan
 from plaid.model.transactions_get_request import TransactionsGetRequest
 from plaid.model.transactions_get_request_options import TransactionsGetRequestOptions
 from aws_lambda_powertools import Logger
+from boto3.dynamodb.conditions import Key
 
 # --- CONFIGURATION ---
 REGION_RESOURCE = 'eu-north-1'
@@ -95,8 +96,8 @@ def generate_cache_key(transactions, monthly_income, monthly_expenses, mode="das
         "income": str(monthly_income),
         "expenses": str(monthly_expenses),
         "transactions": [
-            {"date": t['transaction_date'], "amount": t['amount'], "desc": t['description']}
-            for t in transactions
+            {"date": t.get('transaction_date', ''), "amount": t.get('amount', 0), "desc": t.get('description', '')}
+            for t in transactions if t.get('transaction_id') != 'METADATA'
         ]
     }
     json_str = json.dumps(data_fingerprint, sort_keys=True, default=str)
@@ -183,7 +184,7 @@ def update_user_streak(user_id, daily_spent):
         return 0, 0, False
 
 # ==========================================
-# PART 1: INGESTION
+# PART 1: INGESTION & DATA ACCESS
 # ==========================================
 def ingest_plaid_data():
     log_metric("PlaidConnectionStart", 1)
@@ -232,8 +233,22 @@ def save_to_dynamo(transactions, user_id):
     log_metric("TransactionsSaved", len(saved_items))
     return saved_items
 
+def get_transactions_from_dynamo(user_id):
+    try:
+        response = table.query(
+            KeyConditionExpression=Key('user_id').eq(user_id)
+        )
+        items = response.get('Items', [])
+        # Filtrar perfiles de gamificación, quedarnos solo con transacciones
+        transactions = [item for item in items if item.get('transaction_id') != 'METADATA']
+        log_metric("DynamoDBReadSuccess", len(transactions))
+        return transactions
+    except Exception as e:
+        logger.error("DynamoDB Read Error", extra={"details": str(e)})
+        return []
+
 # ==========================================
-# PART 0: SCORING & FORECAST ENGINE
+# PART 2: SCORING & FORECAST ENGINE
 # ==========================================
 def calculate_financial_score(income, expenses):
     score = 50 
@@ -288,7 +303,7 @@ def calculate_projection(current_expenses):
     return round(daily_avg * days_in_month, 2)
 
 # ==========================================
-# PART 2: AI BRAIN
+# PART 3: AI BRAIN
 # ==========================================
 def invoke_nova_ai(daily_txs, total_daily_spent, monthly_income, monthly_expenses, user_query=None, user_name=DEFAULT_USER_NAME, current_streak=0):
     start_time = time.time()
@@ -329,7 +344,7 @@ def invoke_nova_ai(daily_txs, total_daily_spent, monthly_income, monthly_expense
     """
     
     email_tone = f"CRITICAL: {user_name} spent TOO MUCH. Break their ego." if total_daily_spent > 50 else f"{user_name} spent little. Suspicious. Investigate."
-    has_starbucks = any('starbucks' in t['description'].lower() for t in daily_txs)
+    has_starbucks = any('starbucks' in t.get('description', '').lower() for t in daily_txs)
     
     specific_instructions = ""
     if has_starbucks: specific_instructions += "- STARBUCKS DETECTED: Mock their coffee habit.\n"
@@ -365,22 +380,20 @@ def invoke_nova_ai(daily_txs, total_daily_spent, monthly_income, monthly_expense
         return "System Offline.", f"AI Error: {str(e)}"
 
 # ==========================================
-# PART 3: EMAIL & SMS
+# PART 4: EMAIL & SMS
 # ==========================================
 def generate_html_email(subject, ai_analysis, total_spent, is_alert, transactions):
     color = "#ef4444" if is_alert else "#10b981" 
     status_text = "🚨 High Spending" if is_alert else "✅ Balance Update"
     date_str = datetime.datetime.now().strftime("%Y-%m-%d")
     
-    # SEGURO: Preheader estático, sin inyectar texto impredecible de la IA para no romper el DOM
     preview_text = f"{status_text} | Total: {total_spent:.2f}€."
     padding = "&zwnj;&nbsp;" * 50
     preheader_block = f"""<div style="display:none; font-size:1px; color:#333333; line-height:1px; max-height:0px; max-width:0px; opacity:0; overflow:hidden;">{preview_text}{padding}</div>"""
     
-    tx_rows = "".join([f"""<div style="display:flex; justify-content:space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #334155;"><span style="color: #e2e8f0; font-size: 13px; margin-right: 15px; flex: 1;">{t['description']}</span><span style="font-weight:bold; color: #f8fafc; font-size: 14px; white-space: nowrap;">{float(t['amount']):.2f}€</span></div>""" for t in transactions]) if transactions else ""
+    tx_rows = "".join([f"""<div style="display:flex; justify-content:space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #334155;"><span style="color: #e2e8f0; font-size: 13px; margin-right: 15px; flex: 1;">{t.get('description', '')}</span><span style="font-weight:bold; color: #f8fafc; font-size: 14px; white-space: nowrap;">{float(t.get('amount', 0)):.2f}€</span></div>""" for t in transactions]) if transactions else ""
     tx_section = f"""<div style="margin-bottom: 24px; margin-top: 30px;"><h3 style="color: #94a3b8; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; border-bottom: 1px solid #475569; padding-bottom: 8px; margin-bottom: 10px;">Latest Activity</h3>{tx_rows}</div>""" if transactions else ""
 
-    # SEGURO: Añadido DOCTYPE y meta charset para forzar el renderizado en iOS Mail
     return f"""<!DOCTYPE html>
     <html>
     <head>
@@ -433,31 +446,50 @@ def lambda_handler(event, context):
         logger.append_keys(user_id=user_id)
         logger.info("Execution started", extra={"user_name": user_name})
 
-        query_params = event.get('queryStringParameters')
-        user_query = query_params.get('query') if query_params else None
-
-        transactions = ingest_plaid_data()
-        saved_items = save_to_dynamo(transactions, user_id)
+        query_params = event.get('queryStringParameters') or {}
+        user_query = query_params.get('query')
+        force_sync = query_params.get('sync') == 'true'
+        
+        # Determinar si la invocación viene de EventBridge (Scheduled) o si es un Sync manual
+        is_scheduled_event = event.get('source') == 'aws.events'
+        
+        # --- DECOUPLING LOGIC ---
+        if is_scheduled_event or force_sync:
+            logger.info("Sync triggered. Ingesting from Plaid API.")
+            transactions = ingest_plaid_data()
+            saved_items = save_to_dynamo(transactions, user_id)
+        else:
+            logger.info("Read path triggered. Fetching from DynamoDB.")
+            saved_items = get_transactions_from_dynamo(user_id)
+            if not saved_items:
+                # Fallback por si la DB está vacía en la primera carga
+                transactions = ingest_plaid_data()
+                saved_items = save_to_dynamo(transactions, user_id)
         
         current_month_str = datetime.datetime.now().strftime('%Y-%m')
         total_income, total_expenses = 0.0, 0.0
         
         for t in saved_items:
-            if t['transaction_date'].startswith(current_month_str):
-                amount = float(t['amount'])
-                if any(x in t['description'].lower() for x in ['deposit', 'credit', 'payroll', 'gusto', 'refund']) or amount < 0: total_income += abs(amount)
-                else: total_expenses += abs(amount)
+            t_date = t.get('transaction_date', '')
+            if t_date.startswith(current_month_str):
+                amount = float(t.get('amount', 0))
+                desc = t.get('description', '').lower()
+                if any(x in desc for x in ['deposit', 'credit', 'payroll', 'gusto', 'refund']) or amount < 0: 
+                    total_income += abs(amount)
+                else: 
+                    total_expenses += abs(amount)
         
         current_hour = datetime.datetime.now().hour
-        is_report_time = (current_hour == 7) # Cambiar por True para pruebas y por (current_hour == 7) para las 09:00 España
+        # Cambiar a True temporalmente si necesitas forzar el reporte para probar
+        is_report_time = is_scheduled_event or (current_hour == 7) 
 
         today_str = datetime.datetime.now().strftime('%Y-%m-%d')
         yesterday_str = (datetime.datetime.now() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
         
         target_date = yesterday_str if is_report_time else today_str
         
-        daily_items = [t for t in saved_items if t['transaction_date'] == target_date]
-        total_daily_spent = sum(float(t['amount']) for t in daily_items if float(t['amount']) > 0)
+        daily_items = [t for t in saved_items if t.get('transaction_date') == target_date]
+        total_daily_spent = sum(float(t.get('amount', 0)) for t in daily_items if float(t.get('amount', 0)) > 0)
         is_alert = total_daily_spent > SPENDING_LIMIT
         
         # 🎮 EJECUTAR GAMIFICATION ENGINE 
@@ -473,7 +505,7 @@ def lambda_handler(event, context):
 
         from_cache, dash_message, email_html_body = False, "", ""
 
-        if not user_query and not is_report_time:
+        if not user_query and not is_report_time and not force_sync:
             cache_key = generate_cache_key(saved_items, total_income, total_expenses, "dashboard", user_id)
             cached_message, cache_hit = get_cached_response(cache_key)
             if cache_hit:
@@ -494,12 +526,12 @@ def lambda_handler(event, context):
                     Message={
                         'Subject': {
                             'Data': f"{'🚨' if is_alert else '✅'} Daily Update: {datetime.datetime.now().strftime('%d %b')}",
-                            'Charset': 'UTF-8' # OBLIGATORIO PARA EVITAR CORRUPCIÓN
+                            'Charset': 'UTF-8' 
                         }, 
                         'Body': {
                             'Html': {
                                 'Data': generate_html_email("Update", email_html_body, total_daily_spent, is_alert, daily_items),
-                                'Charset': 'UTF-8' # OBLIGATORIO PARA RENDER EN IOS
+                                'Charset': 'UTF-8' 
                             }
                         }
                     }
