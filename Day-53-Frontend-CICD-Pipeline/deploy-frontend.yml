@@ -1,0 +1,51 @@
+name: Deploy Frontend to S3 & CloudFront
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'      
+      - 'App.tsx'
+      - 'package.json'
+      - 'vite.config.ts'
+      - '.github/workflows/deploy-frontend.yml'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build React App
+        run: npm run build
+        env:
+          VITE_AWS_REGION: "eu-north-1"
+          VITE_USER_POOL_ID: "eu-north-1_F7AiUXQ5n"
+          VITE_USER_POOL_CLIENT_ID: "3031dnoutcfcrvi4g0gs18pbu6"
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::723013807294:role/GitHubActions-LambdaDeployRole
+          aws-region: eu-north-1
+
+      - name: Sync to S3 Bucket
+        run: aws s3 sync dist/ s3://finagent-dashboard-eric-2026 --delete
+
+      - name: Invalidate CloudFront Cache
+        run: aws cloudfront create-invalidation --distribution-id E4IMHFINBIN5N --paths "/*"

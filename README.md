@@ -16,6 +16,10 @@ This repository serves as my living lab where I commit my code, infrastructure s
 
 | Day | Project / Topic | Key Services | Key Learning |
 | :--- | :--- | :--- | :--- |
+| **53** | **Frontend CI/CD & Edge Cache Automation** | `GitHub Actions` `S3` `CloudFront` | Eradicated frontend ClickOps by building a GitOps deployment pipeline. Automated S3 asset synchronization and global CloudFront cache invalidations on every main branch push. |
+| **52** | **Multi-Tenant SaaS & JWT Parsing** | `React` `Amplify` `Python` `Lambda` | Upgraded the architecture to a true Multi-Tenant SaaS. Built a custom Split-Screen Auth UI and updated the Lambda backend to intercept, decode, and validate Cognito JWTs, sandboxing DynamoDB data per user ID. |
+| **51** | **Frontend Security Integration** | `React` `AWS Amplify` | Connected the React SPA to the Cognito backend using AWS Amplify. Replaced generic hosted UIs with an embedded, seamless authentication flow for user onboarding and session management. |
+| **50** | **Identity & Access Management (IAM)** | `Amazon Cognito` | Architected a secure, scalable user directory by provisioning an Amazon Cognito User Pool. Configured App Clients optimized for Single-Page Applications (SPA) without exposing client secrets. |
 | **49** | **Monetization Engine (Cross-Selling)** | `Python` `React` `Lambda` | Engineered a dynamic recommendation engine to simulate Fintech affiliate revenue. Evaluated user cashflow and AI scores to inject targeted financial offers into the frontend. |
 | **48** | **Zero-Trust CI/CD Automation** | `GitHub Actions` `IAM OIDC` | Eliminated ClickOps by building a GitOps pipeline. Secured AWS authentication using OpenID Connect (OIDC) instead of static long-lived credentials, achieving 15-second deployments. |
 | **47** | **CQRS Pattern & Latency Optimization** | `DynamoDB` `Lambda` | Decoupled data ingestion from presentation. Bypassed synchronous third-party API polling during UI loads, reducing dashboard latency from ~3000ms to ~200ms by reading directly from DynamoDB. |
